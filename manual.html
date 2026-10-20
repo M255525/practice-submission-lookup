@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>練習作業查詢說明</title>
+<style>
+  :root { --bg: #f5f3ee; --card: #fff; --ink: #1f2933; --muted: #66717d; --line: #e3dfd6; --accent: #2f6f5e; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161a1d; --card: #1f2428; --ink: #e7eaec; --muted: #9aa5ae; --line: #2f363b; --accent: #6cc3a6; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--ink); line-height: 1.75;
+    font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 56px; }
+  h1 { font-size: 1.5rem; margin: 0 0 16px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin-bottom: 16px; }
+  h2 { font-size: 1.1rem; margin: 0 0 8px; color: var(--accent); }
+  ol, ul { padding-left: 1.3em; margin: 0; }
+  a { color: var(--accent); }
+  code { background: var(--line); border-radius: 4px; padding: 0 4px; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<main>
+  <h1>練習作業查詢｜使用說明</h1>
+
+  <section>
+    <h2>同學怎麼查</h2>
+    <ol>
+      <li>打開<a href="index.html">查詢頁</a>，輸入自己的學號，按「查詢」。</li>
+      <li>畫面會列出老師已登錄的每一筆練習：工具名稱、練習主題、練習數量、產出日期、上課批次。</li>
+      <li>姓名只顯示首尾字（例如「林*妤」），用來確認是自己的資料。</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>查不到或資料有誤怎麼辦</h2>
+    <ul>
+      <li>練習證明上傳到 LINE 記事本後，需要老師整理、辨識後才會出現，不是即時更新。</li>
+      <li>圖片模糊、被裁切，或證明上的學號填錯，都可能導致查不到。</li>
+      <li>依課程規範，有問題請<strong>於上課期間</strong>主動向老師反映，課後才提出原則上不予補登。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>老師維護說明</h2>
+    <ul>
+      <li>資料來自試算表「上傳檔案分類」的「辨識結果」分頁（由 line-notebook-ocr 寫入），直接改試算表即可，網頁不需重新部署。</li>
+      <li>查無資料時顯示的規範文字，讀自同一份試算表的「說明」分頁 A 欄。</li>
+      <li>查詢 API 只回傳學號完全相符的資料，不回傳原始 OCR 全文、圖片連結與完整姓名；試算表本身不需要、也不應該開放分享。</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>練習作業查詢</title>
+<meta name="description" content="輸入學號，查詢已登錄的課程練習作業繳交紀錄">
+<style>
+  :root {
+    --bg: #f5f3ee;
+    --card: #ffffff;
+    --ink: #1f2933;
+    --muted: #66717d;
+    --line: #e3dfd6;
+    --accent: #2f6f5e;
+    --accent-soft: #e4f0eb;
+    --warn: #9a5b13;
+    --warn-soft: #fbf0e1;
+    --err: #a83a32;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161a1d;
+      --card: #1f2428;
+      --ink: #e7eaec;
+      --muted: #9aa5ae;
+      --line: #2f363b;
+      --accent: #6cc3a6;
+      --accent-soft: #1f3a32;
+      --warn: #e2a65a;
+      --warn-soft: #3a2c1a;
+      --err: #f08a80;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+    line-height: 1.6;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 56px; }
+  header h1 { font-size: 1.6rem; margin: 0 0 4px; letter-spacing: .02em; }
+  header p { margin: 0; color: var(--muted); }
+  header a { color: var(--accent); }
+
+  form {
+    display: flex; gap: 8px; margin: 24px 0 8px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px;
+  }
+  input {
+    flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink);
+    font-size: 1.15rem; padding: 10px 12px; letter-spacing: .08em; outline: none;
+  }
+  button {
+    border: 0; border-radius: 8px; background: var(--accent); color: #fff;
+    font-size: 1rem; font-weight: 600; padding: 10px 22px; cursor: pointer;
+  }
+  @media (prefers-color-scheme: dark) { button { color: #10201b; } }
+  button:disabled { opacity: .55; cursor: wait; }
+  .hint { color: var(--muted); font-size: .88rem; margin: 0 4px; }
+
+  #status { margin: 20px 0 0; }
+  .msg { padding: 14px 16px; border-radius: 10px; }
+  .msg.err { background: var(--warn-soft); color: var(--err); }
+  .msg.empty { background: var(--warn-soft); color: var(--warn); }
+
+  .summary {
+    display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0 12px;
+  }
+  .stat {
+    flex: 1 1 140px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 12px 16px;
+  }
+  .stat b { display: block; font-size: 1.7rem; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: .85rem; }
+  .tools { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
+  .chip { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 2px 12px; font-size: .85rem; }
+
+  .rec {
+    background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent);
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 10px;
+  }
+  .rec h3 { margin: 0; font-size: 1.05rem; }
+  .rec .topic { margin: 2px 0 8px; color: var(--ink); overflow-wrap: anywhere; }
+  .rec dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 4px 16px; margin: 0; }
+  .rec dt { color: var(--muted); font-size: .78rem; }
+  .rec dd { margin: 0 0 4px; font-variant-numeric: tabular-nums; }
+
+  #notice {
+    margin-top: 28px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px 20px; font-size: .92rem;
+  }
+  #notice h2 { font-size: 1.05rem; margin: 0 0 8px; }
+  #notice p { margin: 6px 0; }
+  #notice p.sub { font-weight: 700; margin-top: 12px; }
+  footer { margin-top: 32px; color: var(--muted); font-size: .8rem; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>練習作業查詢</h1>
+    <p>輸入學號，查看老師已登錄的課堂練習紀錄。 <a href="manual.html">使用說明</a></p>
+  </header>
+
+  <form id="form" autocomplete="off">
+    <input id="sid" inputmode="numeric" placeholder="請輸入學號" aria-label="學號" maxlength="20" required>
+    <button id="btn" type="submit">查詢</button>
+  </form>
+  <p class="hint">為保護個資，姓名只顯示部分字元；查詢結果不含上傳的圖片。</p>
+
+  <section id="status" aria-live="polite"></section>
+  <section id="notice" hidden></section>
+
+  <footer>資料來源：課堂 LINE 記事本練習證明（OCR 辨識後登錄）</footer>
+</main>
+
+<script>
+const API_URL = 'https://script.google.com/macros/s/AKfycbzN8EP6-WxHqmXSRPhG-X5bDD-LWbYCsH5Ddg0mYLDaKo4rdZGw_CqBbugBUW6hCPBC/exec';
+const LS_KEY = 'practiceLookup.sid';
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+try { $('sid').value = localStorage.getItem(LS_KEY) || ''; } catch (e) {}
+
+let noticeLoaded = false;
+async function showNotice() {
+  if (noticeLoaded) { $('notice').hidden = false; return; }
+  try {
+    const res = await fetch(API_URL + '?action=notice');
+    const data = await res.json();
+    if (!data.ok || !data.lines.length) return;
+    const [title, ...rest] = data.lines;
+    $('notice').innerHTML = '<h2>' + esc(title) + '</h2>' +
+      rest.map(t => '<p' + (/^[一二三四五六七八九十]+、/.test(t) ? ' class="sub"' : '') + '>' + esc(t) + '</p>').join('');
+    $('notice').hidden = false;
+    noticeLoaded = true;
+  } catch (e) {}
+}
+
+function render(data) {
+  if (!data.ok) {
+    $('status').innerHTML = '<div class="msg err">' + esc(data.error || '查詢失敗，請稍後再試') + '</div>';
+    return;
+  }
+  if (!data.count) {
+    $('status').innerHTML = '<div class="msg empty">查無學號 <b>' + esc(data.sid) +
+      '</b> 的練習紀錄。可能是尚未登錄、圖片辨識失敗，或學號辨識有誤，請於上課期間向老師反映。</div>';
+    showNotice();
+    return;
+  }
+  $('notice').hidden = true;
+  const r0 = data.records[0];
+  const chips = Object.entries(data.byTool)
+    .map(([tool, n]) => '<span class="chip">' + esc(tool) + ' × ' + n + '</span>').join('');
+  const cards = data.records.map(r => `
+    <article class="rec">
+      <h3>${esc(r.tool || '（未辨識工具）')}</h3>
+      <p class="topic">${r.topic ? '「' + esc(r.topic) + '」' : '（未辨識主題）'}</p>
+      <dl>
+        <div><dt>練習數量</dt><dd>${esc(r.qty || '—')}</dd></div>
+        <div><dt>產出日期</dt><dd>${esc(r.date || '—')}</dd></div>
+        <div><dt>上課批次</dt><dd>${esc(r.batch || '—')}</dd></div>
+        <div><dt>組別</dt><dd>${esc(r.group || '—')}</dd></div>
+        <div><dt>登錄時間</dt><dd>${esc(r.loggedAt || '—')}</dd></div>
+      </dl>
+    </article>`).join('');
+  $('status').innerHTML = `
+    <div class="summary">
+      <div class="stat"><b>${esc(r0.name || '—')}</b><span>${esc(r0.dept)}｜${esc(data.sid)}</span></div>
+      <div class="stat"><b>${data.count}</b><span>已登錄練習（筆）</span></div>
+      <div class="stat"><b>${data.totalQty}</b><span>累計練習數量</span></div>
+    </div>
+    <div class="tools">${chips}</div>
+    ${cards}`;
+}
+
+$('form').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const sid = $('sid').value.trim();
+  if (!sid) return;
+  try { localStorage.setItem(LS_KEY, sid); } catch (e) {}
+  $('btn').disabled = true;
+  $('btn').textContent = '查詢中…';
+  $('status').innerHTML = '';
+  try {
+    const res = await fetch(API_URL + '?sid=' + encodeURIComponent(sid));
+    render(await res.json());
+  } catch (e) {
+    render({ ok: false, error: '無法連線到查詢服務，請檢查網路後再試一次' });
+  } finally {
+    $('btn').disabled = false;
+    $('btn').textContent = '查詢';
+  }
+});
+</script>
+</body>
+</html>

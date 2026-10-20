@@ -51,28 +51,45 @@ function cellText_(v, tz) {
   return String(v == null ? '' : v).trim();
 }
 
+// 讀「辨識結果」精簡成 [學號, 白名單欄位…]，快取 CACHE_SECONDS 秒，減少 openById 次數
+var CACHE_SECONDS = 300;
+
+function loadTable_() {
+  var cache = CacheService.getScriptCache();
+  var hit = cache.get('table');
+  if (hit) return JSON.parse(hit);
+
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var sh = ss.getSheetByName(RESULT_SHEET);
+  if (!sh) throw new Error('找不到「' + RESULT_SHEET + '」分頁');
+  var values = sh.getDataRange().getValues();
+  var header = values[0].map(function (h) { return String(h).trim(); });
+  var sidCol = header.indexOf('學號');
+  if (sidCol < 0) throw new Error('表頭找不到「學號」欄位');
+  var cols = FIELDS.map(function (f) { return header.indexOf(f[1]); });
+  var tz = ss.getSpreadsheetTimeZone();
+
+  var rows = [];
+  for (var r = 1; r < values.length; r++) {
+    var sid = normalizeSid_(values[r][sidCol]);
+    if (!sid) continue;
+    rows.push([sid].concat(cols.map(function (c) { return c < 0 ? '' : cellText_(values[r][c], tz); })));
+  }
+  var json = JSON.stringify(rows);
+  if (json.length < 95000) cache.put('table', json, CACHE_SECONDS); // CacheService 單筆上限 100KB
+  return rows;
+}
+
 function lookup_(rawSid) {
   var sid = normalizeSid_(rawSid);
   if (!/^[A-Z0-9]{6,12}$/.test(sid)) return { ok: false, error: '請輸入正確的學號（6～12 碼英數字）' };
 
-  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var sh = ss.getSheetByName(RESULT_SHEET);
-  if (!sh) return { ok: false, error: '找不到「' + RESULT_SHEET + '」分頁' };
-  var values = sh.getDataRange().getValues();
-  var header = values[0].map(function (h) { return String(h).trim(); });
-  var sidCol = header.indexOf('學號');
-  if (sidCol < 0) return { ok: false, error: '表頭找不到「學號」欄位' };
-  var cols = FIELDS.map(function (f) { return [f[0], header.indexOf(f[1])]; });
-  var tz = ss.getSpreadsheetTimeZone();
-
-  var records = [];
-  for (var r = 1; r < values.length; r++) {
-    if (normalizeSid_(values[r][sidCol]) !== sid) continue;
+  var records = loadTable_().filter(function (row) { return row[0] === sid; }).map(function (row) {
     var rec = {};
-    cols.forEach(function (c) { rec[c[0]] = c[1] < 0 ? '' : cellText_(values[r][c[1]], tz); });
+    FIELDS.forEach(function (f, i) { rec[f[0]] = row[i + 1]; });
     rec.name = maskName_(rec.name);
-    records.push(rec);
-  }
+    return rec;
+  });
   records.sort(function (a, b) {
     return (b.date + b.loggedAt).localeCompare(a.date + a.loggedAt);
   });
@@ -84,10 +101,15 @@ function lookup_(rawSid) {
     byTool[key] = (byTool[key] || 0) + 1;
     totalQty += parseInt(x.qty, 10) || 0;
   });
-  return { ok: true, sid: sid, count: records.length, totalQty: totalQty, byTool: byTool, records: records };
+  var out = { ok: true, sid: sid, count: records.length, totalQty: totalQty, byTool: byTool, records: records };
+  if (!records.length) out.notice = getNotice_().lines; // 查無資料時一併附上規範，前端不必再打一次
+  return out;
 }
 
 function getNotice_() {
+  var cache = CacheService.getScriptCache();
+  var hit = cache.get('notice');
+  if (hit) return { ok: true, lines: JSON.parse(hit) };
   var sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(NOTICE_SHEET);
   if (!sh) return { ok: true, lines: [] };
   var lines = [];
@@ -95,6 +117,7 @@ function getNotice_() {
     var t = String(row[0] || '').trim();
     if (t && lines[lines.length - 1] !== t) lines.push(t); // 合併儲存格會重複讀到同一段
   });
+  cache.put('notice', JSON.stringify(lines), CACHE_SECONDS);
   return { ok: true, lines: lines };
 }
 

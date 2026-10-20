@@ -126,19 +126,32 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 
 try { $('sid').value = localStorage.getItem(LS_KEY) || ''; } catch (e) {}
 
-let noticeLoaded = false;
-async function showNotice() {
-  if (noticeLoaded) { $('notice').hidden = false; return; }
-  try {
-    const res = await fetch(API_URL + '?action=notice');
-    const data = await res.json();
-    if (!data.ok || !data.lines.length) return;
-    const [title, ...rest] = data.lines;
-    $('notice').innerHTML = '<h2>' + esc(title) + '</h2>' +
-      rest.map(t => '<p' + (/^[一二三四五六七八九十]+、/.test(t) ? ' class="sub"' : '') + '>' + esc(t) + '</p>').join('');
-    $('notice').hidden = false;
-    noticeLoaded = true;
-  } catch (e) {}
+// Apps Script 偶爾卡住約 30 秒後回 404：25 秒逾時就中止重送一次
+async function fetchJson(url, tries = 2, timeoutMs = 25000) {
+  for (let i = 1; ; i++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } catch (e) {
+      if (i >= tries) throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
+
+// 開頁先預熱，讓後端快取好資料，學生按查詢時比較快
+fetch(API_URL + '?action=notice').catch(() => {});
+
+function showNotice(lines) {
+  if (!lines || !lines.length) return;
+  const [title, ...rest] = lines;
+  $('notice').innerHTML = '<h2>' + esc(title) + '</h2>' +
+    rest.map(t => '<p' + (/^[一二三四五六七八九十]+、/.test(t) ? ' class="sub"' : '') + '>' + esc(t) + '</p>').join('');
+  $('notice').hidden = false;
 }
 
 function render(data) {
@@ -149,7 +162,7 @@ function render(data) {
   if (!data.count) {
     $('status').innerHTML = '<div class="msg empty">查無學號 <b>' + esc(data.sid) +
       '</b> 的練習紀錄。可能是尚未登錄、圖片辨識失敗，或學號辨識有誤，請於上課期間向老師反映。</div>';
-    showNotice();
+    showNotice(data.notice);
     return;
   }
   $('notice').hidden = true;
@@ -186,12 +199,16 @@ $('form').addEventListener('submit', async ev => {
   $('btn').disabled = true;
   $('btn').textContent = '查詢中…';
   $('status').innerHTML = '';
+  $('notice').hidden = true;
+  const slow = setTimeout(() => {
+    $('status').innerHTML = '<div class="msg empty">查詢服務回應較慢，請稍候，不需要重新整理…</div>';
+  }, 5000);
   try {
-    const res = await fetch(API_URL + '?sid=' + encodeURIComponent(sid));
-    render(await res.json());
+    render(await fetchJson(API_URL + '?sid=' + encodeURIComponent(sid)));
   } catch (e) {
     render({ ok: false, error: '無法連線到查詢服務，請檢查網路後再試一次' });
   } finally {
+    clearTimeout(slow);
     $('btn').disabled = false;
     $('btn').textContent = '查詢';
   }

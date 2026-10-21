@@ -3,8 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>練習作業查詢</title>
-<meta name="description" content="輸入學號，查詢已登錄的課程練習作業繳交紀錄">
+<title>課堂練習存摺｜學號查練習紀錄</title>
+<meta name="description" content="輸入學號，查詢老師已登錄的課堂練習紀錄與累計練習數量">
+<meta name="theme-color" content="#2f6f5e">
+<meta property="og:title" content="課堂練習存摺">
+<meta property="og:description" content="輸入學號，查詢老師已登錄的課堂練習紀錄與累計練習數量">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://m255525.github.io/practice-submission-lookup/icons/icon-512.png">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <style>
   :root {
     --bg: #f5f3ee;
@@ -96,14 +104,79 @@
   #notice p { margin: 6px 0; }
   #notice p.sub { font-weight: 700; margin-top: 12px; }
   footer { margin-top: 32px; color: var(--muted); font-size: .8rem; text-align: center; }
+  footer p { margin: 4px 0; }
+  footer a { color: var(--accent); }
+  footer img { vertical-align: middle; margin-top: 6px; }
+
+  .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .top-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .ghost {
+    background: var(--card); color: var(--ink); border: 1px solid var(--line);
+    font-weight: 500; font-size: .85rem; padding: 6px 12px;
+  }
+  @media (prefers-color-scheme: dark) { .ghost { color: var(--ink); } }
+  #settings {
+    margin: 16px 0 0; background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 12px 16px; font-size: .92rem;
+  }
+  #settings h2 { font-size: 1rem; margin: 0 0 8px; }
+  #settings label { display: flex; align-items: center; gap: 8px; margin: 6px 0; cursor: pointer; }
+  #settings input[type=checkbox] { flex: none; width: 18px; height: 18px; accent-color: var(--accent); }
+  #settings .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+  #settings .row span { color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border-radius: 0; background: transparent; color: var(--ink); font-weight: 500; padding: 4px 12px; font-size: .85rem; }
+  .seg button[aria-pressed=true] { background: var(--accent); color: #fff; }
+  @media (prefers-color-scheme: dark) { .seg button[aria-pressed=true] { color: #10201b; } }
+  #settings .small { color: var(--muted); font-size: .8rem; margin: 6px 0 0; }
+  body.fs-l { font-size: 112.5%; }
+  body.fs-xl { font-size: 125%; }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
+    background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 14px;
+    opacity: 0; pointer-events: none; transition: all .25s; z-index: 4000; max-width: 90vw;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  #marqueeBar{position:fixed;top:0;left:0;right:0;height:30px;background:var(--card);border-bottom:1px solid var(--line);z-index:2100;overflow:hidden;display:none;align-items:center;}
+  #marqueeBar.show{display:flex;}
+  #marqueeTrack{white-space:nowrap;display:inline-block;padding-left:100%;animation:marquee-scroll linear infinite;font-size:13px;color:var(--muted);}
+  #marqueeBar:hover #marqueeTrack{animation-play-state:paused}
+  @keyframes marquee-scroll{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+  body.has-marquee{padding-top:30px;}
+  @media (max-width: 480px) { .top-actions .lbl { display: none; } }
 </style>
 </head>
 <body>
+<div id="marqueeBar"><div id="marqueeTrack"></div></div>
 <main>
-  <header>
-    <h1>練習作業查詢</h1>
-    <p>輸入學號，查看老師已登錄的課堂練習紀錄。 <a href="manual.html">使用說明</a></p>
+  <header class="topbar">
+    <div>
+      <h1>課堂練習存摺</h1>
+      <p>輸入學號，查看老師已登錄的課堂練習紀錄與累計數量。 <a href="manual.html">使用說明</a></p>
+    </div>
+    <div class="top-actions">
+      <button class="ghost" id="installBtn" type="button" title="加入主畫面">📲<span class="lbl"> 加入主畫面</span></button>
+      <button class="ghost" id="settingsBtn" type="button" aria-expanded="false" aria-controls="settings" title="設定">⚙<span class="lbl"> 設定</span></button>
+    </div>
   </header>
+
+  <section id="settings" hidden>
+    <h2>常用設定</h2>
+    <label><input type="checkbox" id="optRemember"> 在這台裝置記住我的學號</label>
+    <label><input type="checkbox" id="optAuto"> 開啟頁面時自動查詢（需先記住學號）</label>
+    <div class="row">
+      <span>字體大小</span>
+      <div class="seg" role="group" aria-label="字體大小">
+        <button type="button" data-fs="">標準</button>
+        <button type="button" data-fs="fs-l">大</button>
+        <button type="button" data-fs="fs-xl">特大</button>
+      </div>
+      <button class="ghost" id="clearBtn" type="button">清除本機資料</button>
+    </div>
+    <p class="small">在電腦教室或共用電腦上查詢，建議取消「記住學號」，用完按「清除本機資料」。設定只存在這台裝置的瀏覽器。</p>
+  </section>
 
   <form id="form" autocomplete="off">
     <input id="sid" inputmode="numeric" placeholder="請輸入學號" aria-label="學號" maxlength="20" required>
@@ -114,8 +187,13 @@
   <section id="status" aria-live="polite"></section>
   <section id="notice" hidden></section>
 
-  <footer>資料來源：課堂 LINE 記事本練習證明（OCR 辨識後登錄）</footer>
+  <footer>
+    <p>資料來源：課堂 LINE 記事本練習證明（OCR 辨識後登錄）</p>
+    <p>製作：Mark Tsai（蔡豐全）｜<a href="mailto:tsaimark@gmail.com">tsaimark@gmail.com</a>｜<a href="manual.html#creator">創作者資料</a>｜<a href="manual.html">使用說明</a></p>
+    <img src="https://visitor-badge.laobi.icu/badge?page_id=m255525.practicesubmissionlookup" alt="訪客次數" height="20">
+  </footer>
 </main>
+<div id="toast"></div>
 
 <script>
 const API_URL = 'https://script.google.com/macros/s/AKfycbzN8EP6-WxHqmXSRPhG-X5bDD-LWbYCsH5Ddg0mYLDaKo4rdZGw_CqBbugBUW6hCPBC/exec';
@@ -124,7 +202,59 @@ const LS_KEY = 'practiceLookup.sid';
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-try { $('sid').value = localStorage.getItem(LS_KEY) || ''; } catch (e) {}
+// 常用設定：記住學號（預設開，維持原行為）、開頁自動查詢、字體大小
+const SET_KEY = 'practiceLookup.settings';
+let settings = { remember: true, auto: false, fs: '' };
+try { Object.assign(settings, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) {}
+const saveSettings = () => { try { localStorage.setItem(SET_KEY, JSON.stringify(settings)); } catch (e) {} };
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+function applySettings() {
+  $('optRemember').checked = settings.remember;
+  $('optAuto').checked = settings.auto;
+  $('optAuto').disabled = !settings.remember;
+  document.body.classList.remove('fs-l', 'fs-xl');
+  if (settings.fs) document.body.classList.add(settings.fs);
+  document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.fs === settings.fs)));
+}
+
+$('settingsBtn').addEventListener('click', () => {
+  const open = $('settings').hidden;
+  $('settings').hidden = !open;
+  $('settingsBtn').setAttribute('aria-expanded', String(open));
+});
+$('optRemember').addEventListener('change', e => {
+  settings.remember = e.target.checked;
+  if (!settings.remember) {
+    settings.auto = false;
+    try { localStorage.removeItem(LS_KEY); } catch (err) {}
+  }
+  saveSettings(); applySettings();
+  toast(settings.remember ? '下次查詢後會記住學號' : '已不再記住學號');
+});
+$('optAuto').addEventListener('change', e => { settings.auto = e.target.checked; saveSettings(); });
+document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
+  settings.fs = b.dataset.fs; saveSettings(); applySettings();
+}));
+$('clearBtn').addEventListener('click', () => {
+  try { localStorage.removeItem(LS_KEY); localStorage.removeItem(SET_KEY); } catch (e) {}
+  settings = { remember: true, auto: false, fs: '' };
+  applySettings();
+  $('sid').value = '';
+  $('status').innerHTML = '';
+  $('notice').hidden = true;
+  toast('已清除這台裝置上的學號與設定');
+});
+
+applySettings();
+if (settings.remember) { try { $('sid').value = localStorage.getItem(LS_KEY) || ''; } catch (e) {} }
 
 // Apps Script 偶爾卡住約 30 秒後回 404：25 秒逾時就中止重送一次
 async function fetchJson(url, tries = 2, timeoutMs = 25000) {
@@ -195,7 +325,7 @@ $('form').addEventListener('submit', async ev => {
   ev.preventDefault();
   const sid = $('sid').value.trim();
   if (!sid) return;
-  try { localStorage.setItem(LS_KEY, sid); } catch (e) {}
+  if (settings.remember) { try { localStorage.setItem(LS_KEY, sid); } catch (e) {} }
   $('btn').disabled = true;
   $('btn').textContent = '查詢中…';
   $('status').innerHTML = '';
@@ -213,6 +343,123 @@ $('form').addEventListener('submit', async ev => {
     $('btn').textContent = '查詢';
   }
 });
+
+if (settings.remember && settings.auto && $('sid').value) $('form').requestSubmit();
+</script>
+
+<script>
+/* ================= 頂部跑馬燈（獨立運作，共用工作區既有的公告 Google Sheet） ================= */
+(function () {
+  "use strict";
+  var MARQUEE_CHECK_URL = "https://script.google.com/macros/s/AKfycbwKX0DNNbY8y4nf90BFTHtxgfqJcHHcZasRrgycl4QAe52_hkjMWSkYk4xOsqU-JPCROw/exec";
+  var STORAGE_KEY = "practiceLookupMarquee";
+  var REFRESH_MS = 20 * 60 * 1000;
+
+  var bar = document.getElementById("marqueeBar");
+  var track = document.getElementById("marqueeTrack");
+  var lastKey = null;
+
+  function loadCache() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); } catch (e) { return []; }
+  }
+  function saveCache(items) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch (e) {}
+  }
+  function appendParsedText(container, text) {
+    var re = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+    var lastIndex = 0, m;
+    while ((m = re.exec(text))) {
+      if (m.index > lastIndex) container.appendChild(document.createTextNode(text.slice(lastIndex, m.index)));
+      var a = document.createElement("a");
+      a.href = m[2];
+      a.textContent = m[1];
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.style.color = "inherit";
+      a.style.textDecoration = "underline";
+      container.appendChild(a);
+      lastIndex = re.lastIndex;
+    }
+    if (lastIndex < text.length) container.appendChild(document.createTextNode(text.slice(lastIndex)));
+  }
+  function buildTrackContent(items) {
+    var frag = document.createDocumentFragment();
+    function appendPass() {
+      items.forEach(function (item, idx) {
+        if (idx > 0) frag.appendChild(document.createTextNode("　★　"));
+        appendParsedText(frag, item);
+      });
+    }
+    appendPass();
+    frag.appendChild(document.createTextNode("　★　"));
+    appendPass();
+    return frag;
+  }
+  function render(items) {
+    if (!items || !items.length) return;
+    var key = JSON.stringify(items);
+    if (key === lastKey) return;
+    lastKey = key;
+    track.innerHTML = "";
+    track.appendChild(buildTrackContent(items));
+    bar.classList.add("show");
+    document.body.classList.add("has-marquee");
+    var width = track.scrollWidth / 2;
+    track.style.animationDuration = Math.max(width / 80, 10) + "s";
+  }
+  function fetchMarquee() {
+    fetch(MARQUEE_CHECK_URL, { method: "POST", body: JSON.stringify({ serial: "" }) })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data && Array.isArray(data.marquee) && data.marquee.length) {
+          saveCache(data.marquee);
+          render(data.marquee);
+        }
+      })
+      .catch(function () {});
+  }
+
+  render(loadCache());
+  fetchMarquee();
+  setInterval(fetchMarquee, REFRESH_MS);
+})();
+</script>
+
+<script>
+/* ================= PWA 加入主畫面（獨立運作） ================= */
+(function () {
+  "use strict";
+  var deferredPrompt = null;
+  var btn = document.getElementById("installBtn");
+  var ua = navigator.userAgent || "";
+  var isIOSDevice = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  var isMacDesktop = /Macintosh/.test(ua) && !isIOSDevice;
+  var isSafariEngine = /^((?!chrome|crios|fxios|edgios|android).)*safari/i.test(ua);
+  var isStandalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+
+  function fallbackMessage() {
+    if (isIOSDevice) return "請點畫面上的「分享」圖示，選「加入主畫面」";
+    if (isMacDesktop && isSafariEngine) return "請用選單列「檔案」→「加入 Dock」（Safari 17 以上）";
+    return "目前瀏覽器不支援安裝，或已安裝過";
+  }
+
+  window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); deferredPrompt = e; });
+  window.addEventListener("appinstalled", function () { deferredPrompt = null; });
+
+  if (btn) {
+    if (isStandalone) { btn.style.display = "none"; }
+    else {
+      btn.addEventListener("click", function () {
+        if (!deferredPrompt) { toast(fallbackMessage()); return; }
+        try { deferredPrompt.prompt(); deferredPrompt.userChoice.then(function () { deferredPrompt = null; }); }
+        catch (e) { toast(fallbackMessage()); }
+      });
+    }
+  }
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () { navigator.serviceWorker.register("service-worker.js").catch(function () {}); });
+  }
+})();
 </script>
 </body>
 </html>

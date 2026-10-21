@@ -1,6 +1,6 @@
 # practice-submission-lookup — 課堂練習存摺（原名「練習作業查詢」）
 
-學生輸入學號 → 查詢老師已登錄的課堂練習紀錄。2026-10-20 建立；2026-10-21 改名「課堂練習存摺」（repo 名與 Pages 網址維持不變，改了會斷連結）。
+學生輸入學號 → 查詢老師已登錄的課堂練習紀錄。2026-10-20 建立；2026-10-21 改名「課堂練習存摺」，標題下方標示課程「跨境電子商務」（repo 名與 Pages 網址維持不變，改了會斷連結）。
 
 - 前端：單檔 `index.html`＋`manual.html`，公開 repo <https://github.com/M255525/practice-submission-lookup>，GitHub Pages（Actions，push master 自動部署）<https://m255525.github.io/practice-submission-lookup/>。本機預覽 port **8831**。
 - 後端：`gas/` 是**獨立** Apps Script 專案（scriptId 見 `gas/.clasp.json`），Web App 以老師身分執行、任何人可存取。

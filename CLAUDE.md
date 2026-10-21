@@ -32,4 +32,4 @@
   - 查無資料時，規範直接附在 `notice` 欄位一起回傳。
   - 前端 `fetchJson` 25 秒逾時、重試 1 次；開頁先打一次 `action=notice` 預熱；等待超過 5 秒顯示「請稍候」。
 - clasp 3.x 的 `clasp create` 會把 appsscript.json 覆蓋成預設值（America/New_York），建完要改回來。
-- 2026-10-21 兩次 push master 都**沒有自動觸發** Pages workflow（原因未查明），push 後要確認 `gh run list -L 1`，沒跑就 `gh workflow run "Deploy static content to Pages" --ref master`。
+- 2026-10-21 push master 後 Pages workflow 有時**延遲數分鐘才觸發或沒觸發**（原因未查明），push 後要確認 `gh run list -L 1`，沒跑就 `gh workflow run "Deploy static content to Pages" --ref master`。

@@ -107,6 +107,27 @@
   .grp { font-size: 1.2rem; margin: 20px 0 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
   .grp span { font-size: .9rem; font-weight: 400; color: var(--muted); }
 
+  .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 10px; margin: 0 0 14px; }
+  form[hidden], .hint[hidden] { display: none; }
+  form[hidden] + .hint + #status { margin-top: 32px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; }
+  .kpi span { display: block; color: var(--muted); font-size: .82rem; }
+  .kpi b { display: block; font-size: 1.5rem; line-height: 1.25; font-variant-numeric: tabular-nums; }
+  .kpi small { color: var(--muted); font-size: .8rem; }
+  .meter { height: 6px; background: var(--line); border-radius: 4px; margin-top: 8px; overflow: hidden; }
+  .meter i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+  .missing { background: var(--warn-soft); color: var(--warn); border-radius: 10px; padding: 10px 14px; margin: 0 0 16px; font-size: .92rem; }
+  .missing.ok { background: var(--accent-soft); color: var(--accent); }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin: 0 0 14px; }
+  .panel h2 { font-size: 1.05rem; margin: 0 0 4px; }
+  .panel .sub { color: var(--muted); font-size: .82rem; margin: 0 0 10px; }
+  .bar { display: grid; grid-template-columns: minmax(0, 11em) 1fr auto; align-items: center; gap: 4px 10px; padding: 5px 0; }
+  .bar .lbl { font-size: .9rem; overflow-wrap: anywhere; }
+  .bar .lbl small { display: block; color: var(--muted); font-size: .76rem; }
+  .bar .val { font-size: .88rem; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .bar .meter { margin: 0; height: 10px; }
+  .bar:hover .meter i { filter: brightness(1.12); }
+  @media (max-width: 480px) { .bar { grid-template-columns: 1fr auto; } .bar .meter { grid-column: 1 / -1; grid-row: 2; } }
   .rec {
     background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent);
     border-radius: 10px; padding: 14px 16px; margin-bottom: 10px;
@@ -203,12 +224,13 @@
   <div class="modes" role="tablist" aria-label="查詢方式">
     <button type="button" role="tab" data-mode="me" aria-selected="true">個人查詢</button>
     <button type="button" role="tab" data-mode="group" aria-selected="false">組別查詢</button>
+    <button type="button" role="tab" data-mode="stats" aria-selected="false">繳交分析</button>
   </div>
   <form id="form" autocomplete="off">
     <input id="sid" inputmode="numeric" placeholder="請輸入學號" aria-label="學號" maxlength="20" required>
     <button id="btn" type="submit">查詢</button>
   </form>
-  <p class="hint">為保護個資，姓名只顯示部分字元；查詢結果不含上傳的圖片。</p>
+  <p class="hint" id="hint">為保護個資，姓名只顯示部分字元；查詢結果不含上傳的圖片。</p>
 
   <section id="status" aria-live="polite"></section>
   <section id="notice" hidden></section>
@@ -343,8 +365,74 @@ function render(data) {
       <div class="stat"><b>${data.count}</b><span>已登錄練習（筆）</span></div>
       <div class="stat"><b>${data.totalQty}</b><span>累計練習數量</span></div>
     </div>
+    ${kpiHtml(data.kpi)}
     <div class="tools">${chips}</div>
     ${cards}`;
+}
+
+const pct = x => Math.round((x || 0) * 100) + '%';
+const fmtBatch = b => /^\d{8}$/.test(b) ? b.slice(4, 6) + '/' + b.slice(6) : b;
+const meter = x => '<div class="meter"><i style="width:' + Math.min(100, Math.round((x || 0) * 100)) + '%"></i></div>';
+
+function kpiHtml(k) {
+  if (!k) return '';
+  const diff = k.classAvgQty ? '班平均 ' + Math.round(k.classAvgQty) : '';
+  const miss = k.missing.length
+    ? '<div class="missing">⚠ 尚未登錄的場次：' + k.missing.map(m => esc(fmtBatch(m.batch)) + (m.tool ? '（' + esc(m.tool) + '）' : '')).join('、') +
+      '。如已繳交仍未出現，請向老師反映。</div>'
+    : '<div class="missing ok">✔ 目前所有上課場次都有登錄紀錄</div>';
+  return `
+    <div class="kpis">
+      <div class="kpi"><span>繳交率</span><b>${pct(k.rate)}</b><small>${k.submitted} / ${k.sessions} 場</small>${meter(k.rate)}</div>
+      <div class="kpi"><span>工具完成</span><b>${k.toolsDone} / ${k.toolsAll}</b><small>課堂練習工具</small>${meter(k.toolsAll ? k.toolsDone / k.toolsAll : 0)}</div>
+      <div class="kpi"><span>練習數量 PR 值</span><b>${k.pr}</b><small>勝過約 ${k.pr}% 同學・${diff}</small>${meter(k.pr / 100)}</div>
+      <div class="kpi"><span>連續繳交</span><b>${k.streak} 場</b><small>從最近一場往回算</small></div>
+    </div>
+    ${miss}`;
+}
+
+function renderStats(d) {
+  if (!d.ok) return render(d);
+  const bar = (lbl, x, val, tip) =>
+    `<div class="bar" title="${esc(tip)}"><div class="lbl">${lbl}</div>${meter(x)}<div class="val">${val}</div></div>`;
+  const sessions = d.sessionList.map(s => bar(
+    esc(fmtBatch(s.batch)) + '<small>' + esc(s.tool || '（未辨識工具）') + '</small>',
+    s.rate, s.submitted + ' 人・' + pct(s.rate),
+    fmtBatch(s.batch) + ' ' + (s.tool || '') + '：' + s.submitted + ' / ' + d.students + ' 人繳交，累計數量 ' + s.qty +
+      (s.noQty ? '（' + s.noQty + ' 筆未登錄數量）' : '')
+  )).join('');
+  const maxDist = Math.max(1, ...d.distribution);
+  const dist = d.distribution.map((n, i) => ({ n, i })).reverse().filter(x => x.i > 0).map(x => bar(
+    '繳交 ' + x.i + ' 場' + (x.i === d.sessions ? '<small>全勤</small>' : ''),
+    x.n / maxDist, x.n + ' 人', '繳交 ' + x.i + ' / ' + d.sessions + ' 場：' + x.n + ' 人（' + pct(x.n / d.students) + '）'
+  )).join('');
+  const groups = d.groups.map(g => bar(
+    (g.group === '未填' ? '未填組別' : '第 ' + esc(g.group) + ' 組') + '<small>' + g.members + ' 人・累計 ' + g.qty + '</small>',
+    g.rate, pct(g.rate),
+    (g.group === '未填' ? '未填組別' : '第 ' + g.group + ' 組') + '：' + g.members + ' 人共繳交 ' + g.submitted + ' / ' + (g.members * d.sessions) + ' 場次'
+  )).join('');
+  const low = d.sessionList.filter(s => s.rate < d.avgRate).map(s => fmtBatch(s.batch));
+  $('status').innerHTML = `
+    <div class="kpis">
+      <div class="kpi"><span>已登錄學員</span><b>${d.students}</b><small>至少繳交 1 場</small></div>
+      <div class="kpi"><span>上課場次</span><b>${d.sessions}</b><small>共 ${d.rows} 筆紀錄</small></div>
+      <div class="kpi"><span>平均繳交率</span><b>${pct(d.avgRate)}</b>${meter(d.avgRate)}</div>
+      <div class="kpi"><span>全勤人數</span><b>${d.fullAttendance}</b><small>佔 ${pct(d.students ? d.fullAttendance / d.students : 0)}</small></div>
+      <div class="kpi"><span>全班累計數量</span><b>${d.totalQty}</b><small>人均 ${d.students ? Math.round(d.totalQty / d.students) : 0}</small></div>
+    </div>
+    <section class="panel"><h2>各場次繳交率</h2>
+      <p class="sub">分母為已登錄學員 ${d.students} 人${low.length ? '；低於平均的場次：' + esc(low.join('、')) : ''}</p>${sessions}</section>
+    <section class="panel"><h2>繳交場次分布</h2>
+      <p class="sub">每位學員已登錄幾場（共 ${d.sessions} 場）</p>${dist}</section>
+    <section class="panel"><h2>各組繳交率</h2>
+      <p class="sub">組員實際繳交場次 ÷（組員人數 × 上課場次）</p>${groups}</section>
+    <p class="hint">分析只顯示彙總數字，不含任何姓名或學號；從未繳交過的同學不在資料中，因此不計入分母。資料最多延遲 5 分鐘。</p>`;
+}
+
+async function loadStats() {
+  $('status').innerHTML = '<div class="msg empty">正在彙整全班繳交狀況…</div>';
+  try { renderStats(await fetchJson(API_URL + '?action=stats')); }
+  catch (e) { render({ ok: false, error: '無法連線到查詢服務，請檢查網路後再試一次' }); }
 }
 
 function renderGroup(data) {
@@ -371,8 +459,10 @@ document.querySelectorAll('.modes button').forEach(b => b.addEventListener('clic
   mode = b.dataset.mode;
   document.querySelectorAll('.modes button').forEach(x => x.setAttribute('aria-selected', String(x === b)));
   $('sid').placeholder = mode === 'group' ? '輸入你的學號，查看同組組員' : '請輸入學號';
+  $('form').hidden = $('hint').hidden = mode === 'stats';
   $('status').innerHTML = '';
   $('notice').hidden = true;
+  if (mode === 'stats') loadStats();
 }));
 
 $('form').addEventListener('submit', async ev => {

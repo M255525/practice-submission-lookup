@@ -24,7 +24,10 @@ function doGet(e) {
   var p = (e && e.parameter) || {};
   var out;
   try {
-    out = p.action === 'notice' ? getNotice_() : p.action === 'group' ? groupLookup_(p.sid) : lookup_(p.sid);
+    out = p.action === 'notice' ? getNotice_()
+      : p.action === 'group' ? groupLookup_(p.sid)
+      : p.action === 'stats' ? classStats_()
+      : lookup_(p.sid);
   } catch (err) {
     out = { ok: false, error: '查詢失敗：' + err.message };
   }
@@ -102,8 +105,128 @@ function lookup_(rawSid) {
     totalQty += parseInt(x.qty, 10) || 0;
   });
   var out = { ok: true, sid: sid, count: records.length, totalQty: totalQty, byTool: byTool, records: records };
-  if (!records.length) out.notice = getNotice_().lines; // 查無資料時一併附上規範，前端不必再打一次
+  if (records.length) out.kpi = personalKpi_(sid);
+  else out.notice = getNotice_().lines; // 查無資料時一併附上規範，前端不必再打一次
   return out;
+}
+
+// 依學號彙整：每人繳交的場次（記事本名稱＝上課批次，同場次多筆只算一次）與數量
+function classIndex_() {
+  var idx = {};
+  FIELDS.forEach(function (f, i) { idx[f[0]] = i + 1; });
+  var rows = loadTable_();
+  // 場次＝記事本名稱的 8 碼日期（2026/10/06 與 20261006 視為同場）；
+  // 「候補」等非日期名稱歸到同工具的場次，找不到再用產出日期
+  var dateKey = function (v) { var d = String(v || '').replace(/\D/g, ''); return /^20\d{6}$/.test(d) ? d : ''; };
+  var toolBatch = {};
+  rows.forEach(function (row) {
+    var b = dateKey(row[idx.batch]);
+    if (b && row[idx.tool]) {
+      var t = toolBatch[row[idx.tool]] || (toolBatch[row[idx.tool]] = {});
+      t[b] = (t[b] || 0) + 1;
+    }
+  });
+  var students = {};
+  var sessions = {};
+  rows.forEach(function (row) {
+    var batch = dateKey(row[idx.batch]) || topKey_(toolBatch[row[idx.tool]] || {}) || dateKey(row[idx.date]) || '其他';
+    var s = sessions[batch] || (sessions[batch] = { batch: batch, sids: {}, rows: 0, qty: 0, noQty: 0, tools: {} });
+    var qty = parseInt(row[idx.qty], 10) || 0;
+    s.sids[row[0]] = true;
+    s.rows++;
+    s.qty += qty;
+    if (!qty) s.noQty++;
+    if (row[idx.tool]) s.tools[row[idx.tool]] = (s.tools[row[idx.tool]] || 0) + 1;
+    var st = students[row[0]] || (students[row[0]] = { batches: {}, qty: 0, tools: {}, group: {} });
+    st.batches[batch] = true;
+    st.qty += qty;
+    if (row[idx.tool]) st.tools[row[idx.tool]] = true;
+    var g = normalizeGroup_(row[idx.group]);
+    if (g) st.group[g] = (st.group[g] || 0) + 1;
+  });
+  var batches = Object.keys(sessions).sort();
+  batches.forEach(function (b) {
+    var t = sessions[b].tools;
+    sessions[b].tool = Object.keys(t).sort(function (x, y) { return t[y] - t[x]; })[0] || '';
+  });
+  return { students: students, sessions: sessions, batches: batches, rows: rows.length, idx: idx };
+}
+
+function topKey_(tally) {
+  return Object.keys(tally).sort(function (a, b) { return tally[b] - tally[a]; })[0] || '';
+}
+
+// 個人 KPI：繳交率、工具涵蓋、數量與全班比較（PR 值）、連續繳交、缺交場次
+function personalKpi_(sid) {
+  var c = classIndex_();
+  var me = c.students[sid];
+  var sids = Object.keys(c.students);
+  var allTools = {};
+  c.batches.forEach(function (b) { if (c.sessions[b].tool) allTools[c.sessions[b].tool] = true; });
+  var qtys = sids.map(function (k) { return c.students[k].qty; });
+  var below = qtys.filter(function (q) { return q < me.qty; }).length;
+  var equal = qtys.filter(function (q) { return q === me.qty; }).length;
+  var streak = 0;
+  for (var i = c.batches.length - 1; i >= 0 && me.batches[c.batches[i]]; i--) streak++;
+  var submitted = Object.keys(me.batches).length;
+  return {
+    sessions: c.batches.length,
+    submitted: submitted,
+    rate: c.batches.length ? submitted / c.batches.length : 0,
+    toolsDone: Object.keys(me.tools).length,
+    toolsAll: Object.keys(allTools).length,
+    classAvgQty: sids.length ? qtys.reduce(function (s, q) { return s + q; }, 0) / sids.length : 0,
+    pr: sids.length ? Math.round((below + equal / 2) / sids.length * 100) : 0,
+    streak: streak,
+    missing: c.batches.filter(function (b) { return !me.batches[b]; })
+      .map(function (b) { return { batch: b, tool: c.sessions[b].tool }; })
+  };
+}
+
+// 全班繳交狀況分析：只回傳彙總數字，不含任何姓名或學號
+function classStats_() {
+  var c = classIndex_();
+  var sids = Object.keys(c.students);
+  var n = sids.length;
+  var nb = c.batches.length;
+  var dist = [];
+  for (var k = 0; k <= nb; k++) dist.push(0);
+  var groups = {};
+  var totalQty = 0;
+  sids.forEach(function (sid) {
+    var st = c.students[sid];
+    var cnt = Object.keys(st.batches).length;
+    dist[cnt]++;
+    totalQty += st.qty;
+    var g = topKey_(st.group) || '未填';
+    var G = groups[g] || (groups[g] = { group: g, members: 0, submitted: 0, qty: 0 });
+    G.members++;
+    G.submitted += cnt;
+    G.qty += st.qty;
+  });
+  var sessions = c.batches.map(function (b) {
+    var s = c.sessions[b];
+    var cnt = Object.keys(s.sids).length;
+    return { batch: b, tool: s.tool, submitted: cnt, rate: n ? cnt / n : 0, qty: s.qty, noQty: s.noQty, rows: s.rows };
+  });
+  var groupList = Object.keys(groups).map(function (g) {
+    var G = groups[g];
+    G.rate = nb && G.members ? G.submitted / (G.members * nb) : 0;
+    return G;
+  }).sort(function (a, b) { return ((a.group === '未填') - (b.group === '未填')) || (b.rate - a.rate) || (b.qty - a.qty); });
+  var submittedSum = sids.reduce(function (s, sid) { return s + Object.keys(c.students[sid].batches).length; }, 0);
+  return {
+    ok: true,
+    students: n,
+    sessions: nb,
+    rows: c.rows,
+    totalQty: totalQty,
+    avgRate: n && nb ? submittedSum / (n * nb) : 0,
+    fullAttendance: nb ? dist[nb] : 0,
+    sessionList: sessions,
+    distribution: dist,
+    groups: groupList
+  };
 }
 
 // 組別正規化：全形轉半形、去掉「第」「組」與空白，「第７組」→「7」
@@ -111,7 +234,8 @@ function normalizeGroup_(g) {
   return String(g == null ? '' : g)
     .replace(/[！-～]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
     .replace(/[第組组\s]/g, '')
-    .replace(/^0+(?=\d)/, '');
+    .replace(/^0+(?=\d)/, '')
+    .replace(/^[(（]?未.*$/, ''); // 「(未填寫)」視為沒填
 }
 
 function maskSid_(sid) {
@@ -178,4 +302,5 @@ function testLookup() {
   Logger.log(JSON.stringify(lookup_('412221107')));
   Logger.log(JSON.stringify(getNotice_()));
   Logger.log(JSON.stringify(groupLookup_('412221107')));
+  Logger.log(JSON.stringify(classStats_()));
 }

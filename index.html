@@ -87,6 +87,26 @@
   .tools { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
   .chip { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 2px 12px; font-size: .85rem; }
 
+  .modes { display: flex; gap: 4px; margin: 24px 0 -16px; }
+  .modes button {
+    background: transparent; color: var(--muted); font-weight: 600; font-size: .95rem;
+    padding: 6px 14px; border-radius: 8px 8px 0 0; border-bottom: 2px solid transparent;
+  }
+  .modes button[aria-selected=true] { color: var(--accent); border-bottom-color: var(--accent); }
+  @media (prefers-color-scheme: dark) { .modes button { color: var(--muted); } .modes button[aria-selected=true] { color: var(--accent); } }
+  .mem {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 16px; margin-bottom: 8px;
+  }
+  .mem.self { border-left: 4px solid var(--accent); }
+  .mem .who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+  .mem .who b { font-size: 1.05rem; }
+  .mem .who span { color: var(--muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
+  .mem .who .sum { margin-left: auto; color: var(--ink); }
+  .mem .tools { margin: 8px 0 0; }
+  .grp { font-size: 1.2rem; margin: 20px 0 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+  .grp span { font-size: .9rem; font-weight: 400; color: var(--muted); }
+
   .rec {
     background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent);
     border-radius: 10px; padding: 14px 16px; margin-bottom: 10px;
@@ -180,6 +200,10 @@
     <p class="small">在電腦教室或共用電腦上查詢，建議取消「記住學號」，用完按「清除本機資料」。設定只存在這台裝置的瀏覽器。</p>
   </section>
 
+  <div class="modes" role="tablist" aria-label="查詢方式">
+    <button type="button" role="tab" data-mode="me" aria-selected="true">個人查詢</button>
+    <button type="button" role="tab" data-mode="group" aria-selected="false">組別查詢</button>
+  </div>
   <form id="form" autocomplete="off">
     <input id="sid" inputmode="numeric" placeholder="請輸入學號" aria-label="學號" maxlength="20" required>
     <button id="btn" type="submit">查詢</button>
@@ -323,6 +347,34 @@ function render(data) {
     ${cards}`;
 }
 
+function renderGroup(data) {
+  if (!data.ok) return render(data);
+  $('notice').hidden = true;
+  const cards = data.members.map(m => {
+    const chips = Object.entries(m.tools)
+      .map(([tool, n]) => '<span class="chip">' + esc(tool) + ' × ' + n + '</span>').join('');
+    return `
+    <article class="mem${m.self ? ' self' : ''}">
+      <div class="who"><b>${esc(m.name || '—')}${m.self ? '（你）' : ''}</b>
+        <span>${esc(m.dept || '')}｜${esc(m.sid)}</span>
+        <span class="sum">${m.count} 筆・共 ${m.totalQty}</span></div>
+      <div class="tools">${chips}</div>
+    </article>`;
+  }).join('');
+  $('status').innerHTML = `
+    <h2 class="grp">第 ${esc(data.group)} 組<span>${data.memberCount} 位組員・全組累計 ${data.totalQty}</span></h2>
+    ${cards}`;
+}
+
+let mode = 'me';
+document.querySelectorAll('.modes button').forEach(b => b.addEventListener('click', () => {
+  mode = b.dataset.mode;
+  document.querySelectorAll('.modes button').forEach(x => x.setAttribute('aria-selected', String(x === b)));
+  $('sid').placeholder = mode === 'group' ? '輸入你的學號，查看同組組員' : '請輸入學號';
+  $('status').innerHTML = '';
+  $('notice').hidden = true;
+}));
+
 $('form').addEventListener('submit', async ev => {
   ev.preventDefault();
   const sid = $('sid').value.trim();
@@ -336,7 +388,8 @@ $('form').addEventListener('submit', async ev => {
     $('status').innerHTML = '<div class="msg empty">查詢服務回應較慢，請稍候，不需要重新整理…</div>';
   }, 5000);
   try {
-    render(await fetchJson(API_URL + '?sid=' + encodeURIComponent(sid)));
+    if (mode === 'group') renderGroup(await fetchJson(API_URL + '?action=group&sid=' + encodeURIComponent(sid)));
+    else render(await fetchJson(API_URL + '?sid=' + encodeURIComponent(sid)));
   } catch (e) {
     render({ ok: false, error: '無法連線到查詢服務，請檢查網路後再試一次' });
   } finally {

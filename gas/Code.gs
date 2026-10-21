@@ -24,7 +24,7 @@ function doGet(e) {
   var p = (e && e.parameter) || {};
   var out;
   try {
-    out = p.action === 'notice' ? getNotice_() : lookup_(p.sid);
+    out = p.action === 'notice' ? getNotice_() : p.action === 'group' ? groupLookup_(p.sid) : lookup_(p.sid);
   } catch (err) {
     out = { ok: false, error: '查詢失敗：' + err.message };
   }
@@ -106,6 +106,58 @@ function lookup_(rawSid) {
   return out;
 }
 
+// 組別正規化：全形轉半形、去掉「第」「組」與空白，「第７組」→「7」
+function normalizeGroup_(g) {
+  return String(g == null ? '' : g)
+    .replace(/[！-～]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
+    .replace(/[第組组\s]/g, '')
+    .replace(/^0+(?=\d)/, '');
+}
+
+function maskSid_(sid) {
+  return sid.length <= 4 ? sid : sid.slice(0, 3) + new Array(sid.length - 4).join('*') + sid.slice(-2);
+}
+
+// 組別查詢：查詢者必須是該組學員；只回傳組員基本資料（遮罩）與各工具的練習數量
+function groupLookup_(rawSid) {
+  var sid = normalizeSid_(rawSid);
+  if (!/^[A-Z0-9]{6,12}$/.test(sid)) return { ok: false, error: '請輸入正確的學號（6～12 碼英數字）' };
+
+  var gi = 1 + FIELDS.map(function (f) { return f[0]; }).indexOf('group');
+  var rows = loadTable_();
+  // 查詢者的組別取其紀錄中出現最多次者（OCR 偶有誤判）
+  var tally = {};
+  rows.forEach(function (row) {
+    var g = normalizeGroup_(row[gi]);
+    if (row[0] === sid && g) tally[g] = (tally[g] || 0) + 1;
+  });
+  var group = Object.keys(tally).sort(function (a, b) { return tally[b] - tally[a]; })[0];
+  if (!group) {
+    return { ok: false, error: '查不到學號 ' + sid + ' 的組別紀錄，需先有已登錄且填寫組別的練習才能查詢組別' };
+  }
+
+  var idx = {};
+  FIELDS.forEach(function (f, i) { idx[f[0]] = i + 1; });
+  var members = {};
+  rows.forEach(function (row) {
+    if (normalizeGroup_(row[gi]) !== group) return;
+    var m = members[row[0]] || (members[row[0]] = {
+      sid: row[0] === sid ? sid : maskSid_(row[0]), self: row[0] === sid,
+      name: maskName_(row[idx.name]), dept: row[idx.dept], count: 0, totalQty: 0, tools: {}
+    });
+    var tool = row[idx.tool] || '（未辨識工具）';
+    var qty = parseInt(row[idx.qty], 10) || 0;
+    m.tools[tool] = (m.tools[tool] || 0) + qty;
+    m.count++;
+    m.totalQty += qty;
+    if (!m.dept && row[idx.dept]) m.dept = row[idx.dept];
+  });
+  var list = Object.keys(members).map(function (k) { return members[k]; });
+  list.sort(function (a, b) { return (b.self - a.self) || (b.totalQty - a.totalQty); });
+  var totalQty = list.reduce(function (s, m) { return s + m.totalQty; }, 0);
+  return { ok: true, group: group, memberCount: list.length, totalQty: totalQty, members: list };
+}
+
 function getNotice_() {
   var cache = CacheService.getScriptCache();
   var hit = cache.get('notice');
@@ -125,4 +177,5 @@ function getNotice_() {
 function testLookup() {
   Logger.log(JSON.stringify(lookup_('412221107')));
   Logger.log(JSON.stringify(getNotice_()));
+  Logger.log(JSON.stringify(groupLookup_('412221107')));
 }

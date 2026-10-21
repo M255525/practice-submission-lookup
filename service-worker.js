@@ -1,5 +1,5 @@
 // 僅供「加入主畫面」安裝需求使用：network-first + 同源快取備援，不快取跨網域 API 請求（查詢結果不會留在快取）。
-const CACHE_NAME = 'practicepassbook-shell-v2';
+const CACHE_NAME = 'practicepassbook-shell-v3';
 const SHELL_FILES = ['./', './index.html', './manual.html', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {

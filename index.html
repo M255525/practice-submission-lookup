@@ -114,6 +114,18 @@
   .kpi span { display: block; color: var(--muted); font-size: .82rem; }
   .kpi b { display: block; font-size: 1.5rem; line-height: 1.25; font-variant-numeric: tabular-nums; }
   .kpi small { color: var(--muted); font-size: .8rem; }
+  /* KPI 說明：滑鼠移入或點一下（手機）浮現 */
+  [data-tip] { position: relative; cursor: help; outline: none; }
+  [data-tip] > span::after { content: " ⓘ"; opacity: .6; font-size: .9em; }
+  [data-tip]::after {
+    content: attr(data-tip); position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 30;
+    background: var(--ink); color: var(--bg); border-radius: 8px; padding: 8px 10px;
+    font-size: .8rem; line-height: 1.5; font-weight: 400; white-space: pre-line; min-width: 180px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.18); opacity: 0; transform: translateY(4px);
+    transition: opacity .15s, transform .15s; pointer-events: none;
+  }
+  [data-tip]:hover::after, [data-tip]:focus::after { opacity: 1; transform: translateY(0); }
+  [data-tip]:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
   .meter { height: 6px; background: var(--line); border-radius: 4px; margin-top: 8px; overflow: hidden; }
   .meter i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
   .missing { background: var(--warn-soft); color: var(--warn); border-radius: 10px; padding: 10px 14px; margin: 0 0 16px; font-size: .92rem; }
@@ -362,14 +374,15 @@ function render(data) {
   $('status').innerHTML = `
     <div class="summary">
       <div class="stat"><b>${esc(r0.name || '—')}</b><span>${esc(r0.dept)}｜${esc(data.sid)}</span></div>
-      <div class="stat"><b>${data.count}</b><span>已登錄練習（筆）</span></div>
-      <div class="stat"><b>${data.totalQty}</b><span>累計練習數量</span></div>
+      <div class="stat"${tip('老師已登錄的練習證明筆數。\n同一場課交了兩張也會算兩筆。')}><b>${data.count}</b><span>已登錄練習（筆）</span></div>
+      <div class="stat"${tip('每筆紀錄「練習數量」欄的加總。\n不同工具的單位不同（例如關鍵字個數、標題條數），且部分練習證明沒有數量欄，只能當參考。')}><b>${data.totalQty}</b><span>累計練習數量</span></div>
     </div>
     ${kpiHtml(data.kpi)}
     <div class="tools">${chips}</div>
     ${cards}`;
 }
 
+const tip = t => ' tabindex="0" data-tip="' + esc(t) + '"';
 const pct = x => Math.round((x || 0) * 100) + '%';
 const fmtBatch = b => /^\d{8}$/.test(b) ? b.slice(4, 6) + '/' + b.slice(6) : b;
 const meter = x => '<div class="meter"><i style="width:' + Math.min(100, Math.round((x || 0) * 100)) + '%"></i></div>';
@@ -383,10 +396,10 @@ function kpiHtml(k) {
     : '<div class="missing ok">✔ 目前所有上課場次都有登錄紀錄</div>';
   return `
     <div class="kpis">
-      <div class="kpi"><span>繳交率</span><b>${pct(k.rate)}</b><small>${k.submitted} / ${k.sessions} 場</small>${meter(k.rate)}</div>
-      <div class="kpi"><span>工具完成</span><b>${k.toolsDone} / ${k.toolsAll}</b><small>課堂練習工具</small>${meter(k.toolsAll ? k.toolsDone / k.toolsAll : 0)}</div>
-      <div class="kpi"><span>練習數量 PR 值</span><b>${k.pr}</b><small>勝過約 ${k.pr}% 同學・${diff}</small>${meter(k.pr / 100)}</div>
-      <div class="kpi"><span>連續繳交</span><b>${k.streak} 場</b><small>從最近一場往回算</small></div>
+      <div class="kpi"${tip('你有登錄紀錄的場次 ÷ 全班目前的上課場次。\n場次依 LINE 記事本名稱的日期判斷，同一場交多張只算一場。')}><span>繳交率</span><b>${pct(k.rate)}</b><small>${k.submitted} / ${k.sessions} 場</small>${meter(k.rate)}</div>
+      <div class="kpi"${tip('你練習過的工具種類 ÷ 課堂上目前用過的工具種類。')}><span>工具完成</span><b>${k.toolsDone} / ${k.toolsAll}</b><small>課堂練習工具</small>${meter(k.toolsAll ? k.toolsDone / k.toolsAll : 0)}</div>
+      <div class="kpi"${tip('把你的累計練習數量和已登錄的同學比較：PR 76 代表數量勝過約 76% 的同學。\n部分場次沒有登錄數量，只能當參考。')}><span>練習數量 PR 值</span><b>${k.pr}</b><small>勝過約 ${k.pr}% 同學・${diff}</small>${meter(k.pr / 100)}</div>
+      <div class="kpi"${tip('從最近一場課往前數，連續有登錄紀錄的場次數；最近一場沒交就是 0。')}><span>連續繳交</span><b>${k.streak} 場</b><small>從最近一場往回算</small></div>
     </div>
     ${miss}`;
 }
@@ -414,11 +427,11 @@ function renderStats(d) {
   const low = d.sessionList.filter(s => s.rate < d.avgRate).map(s => fmtBatch(s.batch));
   $('status').innerHTML = `
     <div class="kpis">
-      <div class="kpi"><span>已登錄學員</span><b>${d.students}</b><small>至少繳交 1 場</small></div>
-      <div class="kpi"><span>上課場次</span><b>${d.sessions}</b><small>共 ${d.rows} 筆紀錄</small></div>
-      <div class="kpi"><span>平均繳交率</span><b>${pct(d.avgRate)}</b>${meter(d.avgRate)}</div>
-      <div class="kpi"><span>全勤人數</span><b>${d.fullAttendance}</b><small>佔 ${pct(d.students ? d.fullAttendance / d.students : 0)}</small></div>
-      <div class="kpi"><span>全班累計數量</span><b>${d.totalQty}</b><small>人均 ${d.students ? Math.round(d.totalQty / d.students) : 0}</small></div>
+      <div class="kpi"${tip('至少有一筆練習紀錄的學員人數，也是繳交率的分母。\n從未繳交過的同學不在資料中，不會計入。')}><span>已登錄學員</span><b>${d.students}</b><small>至少繳交 1 場</small></div>
+      <div class="kpi"${tip('目前有繳交紀錄的上課場次，依 LINE 記事本名稱的日期判斷；「候補」等名稱會依工具歸入對應場次。')}><span>上課場次</span><b>${d.sessions}</b><small>共 ${d.rows} 筆紀錄</small></div>
+      <div class="kpi"${tip('全班實際繳交的場次總和 ÷（已登錄學員 × 上課場次）。')}><span>平均繳交率</span><b>${pct(d.avgRate)}</b>${meter(d.avgRate)}</div>
+      <div class="kpi"${tip('每一場課都有登錄紀錄的學員人數，及其佔已登錄學員的比例。')}><span>全勤人數</span><b>${d.fullAttendance}</b><small>佔 ${pct(d.students ? d.fullAttendance / d.students : 0)}</small></div>
+      <div class="kpi"${tip('所有紀錄「練習數量」欄的加總，人均＝加總 ÷ 已登錄學員。\n不同工具的單位不同，且有些場次的練習證明沒有數量（計為 0），只能當參考。')}><span>全班累計數量</span><b>${d.totalQty}</b><small>人均 ${d.students ? Math.round(d.totalQty / d.students) : 0}</small></div>
     </div>
     <section class="panel"><h2>各場次繳交率</h2>
       <p class="sub">分母為已登錄學員 ${d.students} 人${low.length ? '；低於平均的場次：' + esc(low.join('、')) : ''}</p>${sessions}</section>
